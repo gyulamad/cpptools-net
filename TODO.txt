@@ -1,0 +1,552 @@
+** Objective: **
+I have a heavy server and I don't want to run it 24/7 
+but only on demand so I have a small server (for example a raspi) 
+and I wake up on lan the big server and shutdown it through ssh 
+when I am done. This is inconvenient especially 
+when I need the server from remote as I always have to 
+ssh in to a small "gatekeeper" machine to do this extra "wakeup" 
+job whenever I need the main server. 
+So I decided to create a little proxy project that always on 
+and does nothing else but forwards my tcp/http communications to 
+the main server, wol when it's sleeping and if I am inactive 
+for more than N minutes and the server also not processing 
+just waiting it turns off automagically.
+
+** TODOs and Plans: **
+
+- Test constants: We need a test config that we can set up for
+port numbers, delays etc. for different test environments. If
+the unit tests for example running on a machine that already
+uses the same port as the tests or too slow/fast 
+that could break the tests so we have to be able to replace
+these numbers in a central config place instead hard coding 
+them in each tests.
+(priority: low)
+
+- cleanup EchoServer and HelloServer:
+these two class made for testing in a way these having a delay
+in the response. We need to clean it up.
+Intorduce a SlowEchoServer and a SlowHelloServer class that
+extending the original cleaned version of the EchoServer and the HelloServer 
+then replace all the usage of the Echo and Hello server to the Slow version to
+making sure we are not breaking any tests or behaviors we have right now,
+so this way later I can choose which version I want to use in my code 
+when I want to test or demonstrate the networking.
+Basically we need to move the delay logic into the Slow**Server child classes
+(priority: low)
+
+
+- replace TcpClient.hpp with TcpClientNB.hpp
+    rename TcpClientNB to TcpClient and remove the old (deprecated) TcpClient as it was created for testing only.
+    you probably should refactor the existing tests and every other usages of the old TcpClient class to use the new one.
+    in result we should have a new TcpClient.hpp and the TcpClientNB should not exists anymore.
+(done - TcpClientB and TcpClientNB classes introduced)
+
+- create a WolProxy.hpp using the TcpProxy:
+WOL server if not available
+optional: ssh in and shutdown the server on idle network trafic
+OR
+- create a "daemon" or script that checks certain things 
+(logs, user/xy process activities etc) and
+shutdown the server when it's inactive
+OR both
+(priority: high)
+(in progress)
+note: 
+- we will move the shutdown logic into the server, no need to implement for now,
+this task is only about to WOL, - no remote SSL
+
+
+
+** AI takes: **
+<<<reasoning_content_start>>>The user wants me to create a step-by-step implementation plan for their proxy project. Let me analyze the codebase and create detailed steps.
+
+Current state:
+1. TcpClient.hpp - Old blocking TCP client (deprecated, for testing only)
+2. TcpClientNB.hpp - New non-blocking TCP client
+3. TcpServer.hpp - TCP server base class
+4. TcpProxy.hpp - TCP proxy using TcpClientNB
+5. HttpServer.hpp - HTTP server built on TcpServer
+
+Goals:
+1. Replace TcpClient.hpp with TcpClientNB.hpp (rename and remove old)
+2. Create WolProxy.hpp using TcpProxy
+3. Implement Wake-on-LAN functionality
+4. Implement auto-shutdown on idle
+
+Let me create a comprehensive step-by-step plan.<<<reasoning_content_end>>># Step-by-Step Implementation Plan
+
+---
+
+## Step 1: Replace TcpClient.hpp with TcpClientNB.hpp
+
+### Task / Description
+Rename `TcpClientNB.hpp` to `TcpClient.hpp`, refactor the class name from `TcpClientNB` to `TcpClient`, and delete the old deprecated blocking `TcpClient` implementation.
+
+### Detailed Information
+- Rename file: `TcpClientNB.hpp` → `TcpClient.hpp`
+- In the renamed file, change `class TcpClientNB` to `class TcpClient`
+- Update all constructor/destructor references accordingly
+- Delete the old `TcpClient.hpp` content entirely (the blocking version)
+- Update `#include "TcpClientNB.hpp"` in `TcpProxy.hpp` to `#include "TcpClient.hpp"`
+- The new `TcpClient` is non-blocking and designed for `select()` event loops
+- Key methods: `connect()`, `disconnect()`, `send()`, `handleWrite()`, `handleRead()`, `isConnected()`, `isConnecting()`, `hasDataToSend()`, `peekReceived()`, `consumeReceived()`
+
+### Precondition Criteria
+- None. This is the first step.
+
+### Other Comments
+- The old blocking `TcpClient` was used only for testing; all production code (`TcpProxy.hpp`) already uses `TcpClientNB`
+- Any existing tests using the old blocking API must be rewritten to use the non-blocking API with an event loop
+
+---
+
+## Step 2: Identify and Refactor Tests Using Old TcpClient
+
+### Task / Description
+Locate all test files that use the old blocking `TcpClient` API and refactor them to use the new non-blocking `TcpClient`.
+
+### Detailed Information
+- Search codebase for usages of the old API methods: `available()`, `read()` (blocking line read)
+- The new API does not have `available()` or `read()` — it uses `handleRead()`, `peekReceived()`, `consumeReceived()`
+- Tests must be rewritten to use `select()`-based event loops or simple polling
+- Pattern for new tests:
+  ```cpp
+  TcpClient client;
+  client.connect("host", port);
+  while (client.isConnecting()) { /* wait with select */ }
+  client.send("message");
+  // Use select() to wait for data, then:
+  client.handleRead();
+  string data = client.peekReceived();
+  client.consumeReceived(data.size());
+  ```
+
+### Precondition Criteria
+- Step 1 must be completed successfully
+- Valid only if tests exist that reference the old blocking API
+
+### Other Comments
+- If no tests exist, this step can be skipped
+- Document any test that cannot be easily refactored for later review
+
+---
+
+## Step 3: Create Wake-on-LAN Utility Module
+
+### Task / Description
+Create a standalone `WolSender.hpp` utility class for sending Wake-on-LAN magic packets.
+
+### Detailed Information
+- Create new file `WolSender.hpp`
+- Wake-on-LAN magic packet format:
+  - 6 bytes of `0xFF` followed by 16 repetitions of the target MAC address (total 102 bytes)
+  - Send via UDP broadcast to port 7 or 9
+- Required methods:
+  ```cpp
+  class WolSender {
+  public:
+      // MAC format: "AA:BB:CC:DD:EE:FF" or "AA-BB-CC-DD-EE-FF"
+      static bool send(const std::string& macAddress, 
+                       const std::string& broadcastIp = "255.255.255.255", 
+                       int port = 9);
+      static std::string getLastError();
+  };
+  ```
+- Implementation needs:
+  - Parse MAC address string
+  - Create UDP socket
+  - Enable `SO_BROADCAST` socket option
+  - Send magic packet
+  - Return true on success, false on failure
+
+### Precondition Criteria
+- None. Can be developed in parallel with Steps 1-2.
+
+### Other Comments
+- This is a pure utility with no dependencies on other project classes
+- Consider adding a retry mechanism (send 3 times for reliability)
+
+---
+
+## Step 4: Create Server State Management Module
+
+### Task / Description
+Create `ServerState.hpp` to track the backend server's power state and manage WOL/shutdown logic.
+
+### Detailed Information
+- Create new file `ServerState.hpp`
+- States: `UNKNOWN`, `SLEEPING`, `WAKING`, `ONLINE`
+- Required class interface:
+  ```cpp
+  class ServerState {
+  public:
+      enum State { UNKNOWN, SLEEPING, WAKING, ONLINE };
+      
+      ServerState(const std::string& mac, 
+                  const std::string& host, 
+                  uint16_t port,
+                  int idleTimeoutSec = 300);
+      
+      State getState() const;
+      void setOnline();           // Called on successful backend connection
+      void setOffline();          // Called when backend disconnects
+      void checkIdle(time_t now); // Update idle state based on activity
+      void markActivity();        // Call when traffic is forwarded
+      bool shouldShutdown();      // Returns true if idle timeout exceeded
+      bool shouldWake();          // Returns true if sleeping and traffic arrives
+      void wake();                // Send WOL packet
+      time_t getIdleSeconds() const;
+      
+  private:
+      std::string macAddress;
+      std::string backendHost;
+      uint16_t backendPort;
+      State state;
+      time_t lastActivity;
+      int idleTimeoutSec;
+  };
+  ```
+
+### Precondition Criteria
+- Step 3 must be completed (WolSender required for `wake()` method)
+
+### Other Comments
+- `lastActivity` should be updated on every forwarded byte (both directions)
+- Consider adding a "grace period" after WOL before declaring failure (e.g., 30-60 seconds)
+
+---
+
+## Step 5: Create WolProxy.hpp
+
+### Task / Description
+Create `WolProxy.hpp` extending `TcpProxy` with Wake-on-LAN and auto-shutdown capabilities.
+
+### Detailed Information
+- Create new file `WolProxy.hpp`
+- Inherit from `TcpProxy`
+- Override key methods to integrate `ServerState`:
+  ```cpp
+  class WolProxy : public TcpProxy {
+  public:
+      WolProxy(const std::string& backendMac,
+               const std::string& backendHost,
+               uint16_t backendPort,
+               int idleTimeoutSec = 300);
+      
+      void forward(int listenPort) override;
+      
+  protected:
+      void onClientConnect(int fd, const std::string& addr) override;
+      void onClientDisconnect(int fd) override;
+      void onRawData(int clientFd, std::string& buf) override;
+      void onTick() override;  // Check idle timeout
+      
+  private:
+      ServerState serverState;
+      void checkBackendState();
+      void handleWakingState();
+  };
+  ```
+- Key behaviors:
+  - On first client connection: if server is `SLEEPING`, send WOL and buffer or reject connection
+  - On `onTick()`: check if idle timeout exceeded, trigger shutdown if configured
+  - On any forwarded data: call `serverState.markActivity()`
+
+### Precondition Criteria
+- Step 4 must be completed (ServerState class required)
+- [STUB] TcpProxy must be functional (already exists)
+
+### Other Comments
+- Need to handle the "waking" state carefully — clients connecting during wake-up should either:
+  - Wait with connection pending (preferred), OR
+  - Receive a "Service Unavailable" HTTP 503 response
+- Consider adding a configuration option for this behavior
+
+---
+
+## Step 6: Implement Connection Buffering During Wake-up
+
+### Task / Description
+Modify `WolProxy` to queue incoming client connections while the backend server is waking up.
+
+### Detailed Information
+- Add to `WolProxy`:
+  ```cpp
+  struct PendingClient {
+      int fd;
+      std::string addr;
+      time_t connectTime;
+      std::string initialData;  // Data received while waiting
+  };
+  std::vector<PendingClient> pendingClients;
+  ```
+- Behavior:
+  - When client connects and state is `SLEEPING` or `WAKING`:
+    - Add to `pendingClients`
+    - Do not create backend connection yet
+  - When state transitions to `ONLINE`:
+    - Process all pending clients
+    - Create backend connections
+    - Forward any buffered `initialData`
+  - Implement timeout for pending clients (e.g., 30 seconds max wait)
+- Modify `onRawData()` to buffer data from pending clients instead of forwarding
+
+### Precondition Criteria
+- Step 5 must be completed
+- Valid only if "wait during wake-up" behavior is desired (not "reject immediately")
+
+### Other Comments
+- This prevents connection failures during the ~10-60 second boot time
+- Must handle client disconnect during pending state (clean up properly)
+
+---
+
+## Step 7: Implement SSH-based Shutdown Command
+
+### Task / Description
+Create `SshShutdown.hpp` utility to execute remote shutdown commands via SSH.
+
+### Detailed Information
+- Create new file `SshShutdown.hpp`
+- Two implementation options:
+  1. **libssh2 approach** (preferred, no external dependency on ssh binary):
+     ```cpp
+     class SshShutdown {
+     public:
+         SshShutdown(const std::string& host, 
+                     uint16_t port,
+                     const std::string& user,
+                     const std::string& keyPath);
+         bool execute(const std::string& command = "sudo shutdown -h +1");
+         std::string getLastError() const;
+     };
+     ```
+  2. **Simple popen approach** (executes local `ssh` binary):
+     ```cpp
+     // Uses system() or popen() to run: ssh user@host "shutdown cmd"
+     ```
+- Key considerations:
+  - SSH key-based authentication (no password prompts)
+  - Configurable shutdown command
+  - Async execution preferred to avoid blocking the proxy
+
+### Precondition Criteria
+- None. Can be developed in parallel with Steps 3-5.
+
+### Other Comments
+- The "+1" in shutdown command gives a 1-minute grace period
+- Consider using `systemctl suspend` instead of shutdown for faster resume
+
+---
+
+## Step 8: Integrate SSH Shutdown into WolProxy
+
+### Task / Description
+Add optional SSH shutdown capability to `WolProxy` when idle timeout is reached.
+
+### Detailed Information
+- Extend `WolProxy` constructor:
+  ```cpp
+  WolProxy(const std::string& backendMac,
+           const std::string& backendHost,
+           uint16_t backendPort,
+           int idleTimeoutSec,
+           bool enableAutoShutdown,
+           const std::string& sshUser = "",
+           const std::string& sshKeyPath = "");
+  ```
+- Modify `onTick()`:
+  ```cpp
+  void onTick() override {
+      time_t now = time(nullptr);
+      serverState.checkIdle(now);
+      
+      if (serverState.shouldShutdown() && enableAutoShutdown) {
+          // 1. Stop accepting new connections
+          // 2. Wait for existing connections to close (grace period)
+          // 3. Execute SSH shutdown
+          // 4. Update state to SLEEPING
+      }
+  }
+  ```
+- Add grace period logic (e.g., wait 30 seconds after shutdown decision)
+
+### Precondition Criteria
+- Step 5 must be completed (WolProxy base)
+- Step 7 must be completed (SshShutdown utility)
+
+### Other Comments
+- Add configuration for shutdown command
+- Log all shutdown attempts and results
+
+---
+
+## Step 9: Create Configuration System
+
+### Task / Description
+Create `Config.hpp` to manage all proxy settings from a config file or command-line arguments.
+
+### Detailed Information
+- Create new file `Config.hpp`
+- Configuration options:
+  ```cpp
+  struct Config {
+      uint16_t listenPort = 8080;
+      std::string backendHost;
+      uint16_t backendPort = 80;
+      std::string backendMac;          // For WOL
+      int idleTimeoutSec = 300;        // 5 minutes
+      bool enableAutoShutdown = false;
+      std::string sshUser;
+      std::string sshKeyPath;
+      std::string shutdownCommand = "sudo shutdown -h +1";
+      int wakeTimeoutSec = 60;         // Max wait for server to wake
+      int pendingClientTimeoutSec = 30;
+      
+      static Config fromFile(const std::string& path);
+      static Config fromArgs(int argc, char* argv[]);
+  };
+  ```
+- Support config file format (JSON or simple key=value)
+
+### Precondition Criteria
+- Steps 5 and 8 should be completed (defines what needs configuration)
+
+### Other Comments
+- Command-line arguments should override config file values
+- Add `--help` option with usage information
+
+---
+
+## Step 10: Create Main Entry Point
+
+### Task / Description
+Create `main.cpp` that instantiates and runs the WolProxy with configuration.
+
+### Detailed Information
+- Create new file `main.cpp`
+- Implementation:
+  ```cpp
+  #include "WolProxy.hpp"
+  #include "Config.hpp"
+  
+  int main(int argc, char* argv[]) {
+      Config config = Config::fromArgs(argc, argv);
+      
+      WolProxy proxy(
+          config.backendMac,
+          config.backendHost,
+          config.backendPort,
+          config.idleTimeoutSec,
+          config.enableAutoShutdown,
+          config.sshUser,
+          config.sshKeyPath
+      );
+      
+      proxy.forward(config.listenPort);
+      return 0;
+  }
+  ```
+- Add signal handling for graceful shutdown (SIGINT, SIGTERM)
+
+### Precondition Criteria
+- Steps 5, 8, and 9 must be completed
+
+### Other Comments
+- Consider daemonization support (fork to background, PID file)
+- Add logging to file option
+
+---
+
+## Step 11: Add Logging System
+
+### Task / Description
+Create a simple logging module and integrate it throughout the project.
+
+### Detailed Information
+- Create new file `Logger.hpp`
+- Interface:
+  ```cpp
+  namespace Logger {
+      void setLogFile(const std::string& path);
+      void setLevel(int level);  // 0=ERROR, 1=WARN, 2=INFO, 3=DEBUG
+      
+      void error(const std::string& msg);
+      void warn(const std::string& msg);
+      void info(const std::string& msg);
+      void debug(const std::string& msg);
+  }
+  ```
+- Replace all `cout`/`cerr` statements in:
+  - `TcpServer.hpp`
+  - `TcpProxy.hpp`
+  - `WolProxy.hpp`
+  - `ServerState.hpp`
+- Log key events:
+  - Client connect/disconnect
+  - Backend state changes
+  - WOL sent
+  - Shutdown triggered
+  - Idle timeout warnings
+
+### Precondition Criteria
+- All previous steps completed
+
+### Other Comments
+- Use timestamps in log messages
+- Consider log rotation for long-running deployments
+
+---
+
+## Step 12: Write Integration Tests
+
+### Task / Description
+Create integration tests for the complete WOL proxy workflow.
+
+### Detailed Information
+- Test scenarios:
+  1. **Basic forwarding**: Client connects, data forwarded, client disconnects
+  2. **WOL on demand**: Server sleeping, client connects, WOL sent, server wakes, connection established
+  3. **Idle shutdown**: No activity for N seconds, shutdown command executed
+  4. **Pending clients**: Multiple clients connect during wake-up, all served after wake
+  5. **Backend failure**: Backend doesn't respond after WOL timeout, clients rejected
+  6. **Activity reset**: Traffic during idle period resets timeout
+
+### Precondition Criteria
+- All implementation steps (1-11) completed
+
+### Other Comments
+- Use mock WOL sender for testing (don't actually wake real machines)
+- Use mock SSH shutdown for testing
+- Consider using a simple echo server as test backend
+
+---
+
+## Summary of Dependencies
+
+```
+Step 1 (TcpClient refactor)
+    ↓
+Step 2 (Test refactor) ─────────────────────────────────┐
+                                                          │
+Step 3 (WolSender) ────────────────────┐                 │
+                                        ↓                 │
+Step 4 (ServerState) ←────────────────────────────────── │
+                                        ↓                 │
+Step 5 (WolProxy base) ←─────────────────────────────────┘
+    ↓
+Step 6 (Connection buffering)
+    ↓
+Step 7 (SshShutdown) ──────┐
+                            ↓
+Step 8 (SSH integration) ←─┘
+    ↓
+Step 9 (Config)
+    ↓
+Step 10 (Main)
+    ↓
+Step 11 (Logging)
+    ↓
+Step 12 (Integration tests)
+```

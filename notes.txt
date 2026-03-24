@@ -1,0 +1,3 @@
+(timeout 1 ./builder tests/tests.cpp --mode=coverage,strict,test --coverage-exclude "cpptools/misc/*" --run) && echo "[OK]" || echo "[ERROR] ($?)"
+
+see launch.json: "wol-proxy.cpp (debug)" to start. - on the server you need to shutdown automatically on idle (watch the logs and logged in users)
