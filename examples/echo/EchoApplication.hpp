@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../misc/App.hpp"
-#include "../misc/Arguments.hpp"
-#include "../misc/ConsoleLogger.hpp"
+#include "../../../misc/App.hpp"
+#include "../../../misc/Arguments.hpp"
+#include "../../../misc/ConsoleLogger.hpp"
 
 #include "EchoServer.hpp"
 

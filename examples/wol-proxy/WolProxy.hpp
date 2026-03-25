@@ -1,8 +1,10 @@
 #pragma once
 
-#include "../misc/Executor.hpp"
-#include "TcpProxy.hpp"
-#include "wol.hpp"
+#include "../../../misc/Executor.hpp"
+#include "../../TcpProxy.hpp"
+#include "../../wol.hpp"
+
+using namespace std;
 
 class WolProxy: public TcpProxy {
 public:

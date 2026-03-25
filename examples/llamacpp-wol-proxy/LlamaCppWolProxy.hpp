@@ -2,8 +2,8 @@
 
 // DEPENDENCY: nlohmann/json:v3.12.0
 
-#include "WolProxy.hpp"
-#include "wol_ready.hpp"
+#include "../wol-proxy/WolProxy.hpp"
+#include "../../wol_ready.hpp"
 
 // =============================================================================
 // LlamaCppWolProxy - WolProxy with HTTP health check for llama.cpp model loading

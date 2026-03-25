@@ -2,10 +2,10 @@
 
 // DEPENDENCY: nlohmann/json:v3.12.0
 
-#include "../misc/App.hpp"
-#include "../misc/Arguments.hpp"
-#include "../misc/ConsoleLogger.hpp"
-#include "../misc/explode.hpp"
+#include "../../../misc/App.hpp"
+#include "../../../misc/Arguments.hpp"
+#include "../../../misc/ConsoleLogger.hpp"
+#include "../../../misc/explode.hpp"
 
 #include "LlamaCppWolProxy.hpp"
 

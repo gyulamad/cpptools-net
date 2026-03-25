@@ -1,11 +1,11 @@
 #pragma once
 
-#include "../misc/App.hpp"
-#include "../misc/Arguments.hpp"
-#include "../misc/ConsoleLogger.hpp"
-#include "../misc/explode.hpp"
+#include "../../../misc/App.hpp"
+#include "../../../misc/Arguments.hpp"
+#include "../../../misc/ConsoleLogger.hpp"
+#include "../../../misc/explode.hpp"
 
-#include "TcpProxy.hpp"
+#include "../../TcpProxy.hpp"
 
 using namespace std;
 
