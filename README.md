@@ -18,9 +18,12 @@ Client → WolProxy → TcpProxy → TcpClientNB → Remote Server
 | [`TcpClientNB.hpp`](TcpClientNB.hpp:1) | Non-blocking TCP client for proxy connections |
 | [`TcpProxy.hpp`](TcpProxy.hpp:1) | Forwards client connections to backend server |
 | [`WolProxy.hpp`](WolProxy.hpp:1) | Extends TcpProxy with WOL and SSH startup |
+| [`LlamaCppWolProxy.hpp`](examples/llamacpp-wol-proxy/LlamaCppWolProxy.hpp:1) | Extends WolProxy with HTTP health check for llama.cpp |
+| [`wol_ready.hpp`](wol_ready.hpp:1) | HTTP health check utility for llama.cpp model loading |
 | [`wol.hpp`](wol.hpp:1) | Wake-on-LAN utility using `wakeonlan` command |
 | [`ping.hpp`](ping.hpp:1) | Ping utility for server availability check |
 | [`wol-proxy.cpp`](wol-proxy.cpp:1) | Main entry point with CLI argument parsing |
+| [`llamacpp-wol-proxy.cpp`](examples/llamacpp-wol-proxy/llamacpp-wol-proxy.cpp:1) | Main entry point for llama.cpp WOL proxy |
 | [`auto-shutdown.sh`](auto-shutdown.sh:1) | Server-side script to shutdown after N seconds idle |
 
 ## How It Works
@@ -38,18 +41,27 @@ Client → WolProxy → TcpProxy → TcpClientNB → Remote Server
 
 ```bash
 ./builder wol-proxy.cpp --mode=strict
+./builder llamacpp-wol-proxy.cpp --mode=strict
 ```
 
 ### Run
 
 ```bash
+# Basic WOL Proxy
 .build/strict/wol-proxy <port> <server>:<port> <wol-ip> <mac> <ssh-user> <ssh-cmd>
+
+# LlamaCpp WOL Proxy (with HTTP health check)
+.build/strict/llamacpp-wol-proxy <port> <server>:<port> <wol-ip> <mac> <ssh-user> <ssh-cmd> [health_retry] [health_delay]
 ```
 
 ### Example
 
 ```bash
+# Basic WOL Proxy
 .build/strict/wol-proxy 9091 192.168.1.197:8080 192.168.1.255 50:65:F3:2D:45:3F gyula "./llamacpp-server.sh Qwen3 200000"
+
+# LlamaCpp WOL Proxy (waits for /health endpoint before accepting connections)
+.build/strict/llamacpp-wol-proxy 9091 192.168.1.197:8080 192.168.1.255 50:65:F3:2D:45:3F gyula "./llamacpp-server.sh Qwen3 200000" 30 2000
 ```
 
 ## Server Setup
@@ -79,6 +91,7 @@ This will shutdown the server when:
 - **Graceful shutdown** - flushes send queue before closing connections
 - **WOL integration** via shell commands
 - **SSH startup** for remote server services
+- **HTTP health check** for llama.cpp model loading (LlamaCppWolProxy)
 
 ## Requirements
 

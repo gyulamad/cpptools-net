@@ -12,6 +12,21 @@ the main server, wol when it's sleeping and if I am inactive
 for more than N minutes and the server also not processing 
 just waiting it turns off automagically.
 
+** Current State: **
+
+### Completed Features
+
+#### WolProxy (cpptools/net/examples/wol-proxy/)
+- TCP proxy that automatically wakes up backend server via Wake-on-LAN
+- Optional SSH startup command execution after WOL succeeds
+- Usage: `./wol-proxy <port> <address> <wolip> <mac> [user] [cmd]`
+
+#### LlamaCppWolProxy (cpptools/net/examples/llamacpp-wol-proxy/)
+- Extends WolProxy with HTTP health check for llama.cpp model loading
+- Waits for `/health` endpoint to return `{"status": "ok"}` before accepting connections
+- Configurable retry count and delay for health checks
+- Usage: `./llamacpp-wol-proxy <port> <address>:<port> <wolip> <mac> <user> <cmd> [health_retry] [health_delay]`
+
 ** TODOs and Plans: **
 
 - Test constants: We need a test config that we can set up for
