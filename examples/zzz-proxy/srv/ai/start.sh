@@ -14,4 +14,4 @@ ssh -x gyula@monster "echo LOADED" || {
     goto start
 }
 
-ssh -x gyula@monster "./llamacpp-server.sh MiniMax-M2.5 40000 &" &
+ssh -x gyula@monster "./llamacpp-server.sh MiniMax-M2.5 40000 >> ./llamacpp-server.log 2>&1 &" &
