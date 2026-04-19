@@ -31,9 +31,9 @@ using namespace std;
 //     TcpProxy proxy;
 //     proxy.forward(8080, "backend.example.com", 9090);
 // =============================================================================
-class TcpProxy : public TcpServer {
+class TcpProxy: public TcpServer {
 public:
-    TcpProxy() : backendPort(0) {}
+    TcpProxy(): backendPort(0) {}
     virtual ~TcpProxy() {}
 
     void forward(int port, const string& host, int hport) {

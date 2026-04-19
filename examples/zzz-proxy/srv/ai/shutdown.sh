@@ -1,8 +1,9 @@
 #!/bin/bash
 
-source ../goto.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../goto.sh"
 
-./stop.sh
+"$SCRIPT_DIR/stop.sh"
 : retry
 echo "shutdown..."
 ssh -x gyula@monster "sudo shutdown -h now" || {
