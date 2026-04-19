@@ -1,8 +1,8 @@
+#pragma once
+
 // =============================================================================
 // ZzzProxyApplication.hpp — Main application wrapper for sleep/wake proxy  
 // =============================================================================
-
-#pragma once
 
 #include "../../../misc/App.hpp"
 #include "../../../misc/Arguments.hpp"
@@ -44,31 +44,7 @@ public:
         string sleepcmd= args.getopt<string>(6, "./sleep.sh");
         int idleTimeoutSec = args.getopt<int>(7, 300);
 
-#ifdef DEBUG
-        fprintf(stderr,"[DEBUG] Starting ZzzProxy:\n");
-#endif
-        
-#ifdef DEBUG_ZZZPROXY_EXTRA_LOGGING
-fprintf(stderr,
-"  local_port=%d\n"
-"  backend_host='%s'\n"
-"  backend_port=%s\n",
-port,
-addr[0].c_str(),
-addr[1].c_str());
-#endif
-        
-#ifdef VERY_VERBOSE_DEBUG_OUTPUT_THIS_IS_NOT_NORMAL
-cerr << __FUNCTION__ << ": parsed arguments:" << endl;       
-#endif
-        
-#if defined(PROFILING_ENABLED) && PROFILING_LEVEL >= 2
-Profiler prof(__PRETTY_FUNCTION__);
-prof.start();
-SCOPE_EXIT{ prof.stop(); };
-#endif
-
-       int backendPort = parse<int>(addr[1]);
+        int backendPort = parse<int>(addr[1]);
         
         // Construct and run proxy instance:
         ZzzProxy s;
