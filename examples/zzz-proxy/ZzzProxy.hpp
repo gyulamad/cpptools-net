@@ -38,7 +38,8 @@ public:
 
         LOG("ZzzProxy config:");
         LOG("  Backend: " + host + ":" + to_string(hport));
-        LOG("Wake cmd: " + EMPTY_OR(wakeCmd));
+        LOG("Wake cmd : " + EMPTY_OR(wakeCmd));
+        LOG("Check cmd: " + EMPTY_OR(checkCmd));
         LOG("Sleep cmd: " + EMPTY_OR(sleepCmd));
         LOG("Idle timeout: " + to_string(this->idleTimeoutSec) + " seconds");
 
@@ -87,19 +88,25 @@ protected:
     void startService() {
         if (!loading && !loaded) {
             loading = true;
-            if (!wakeCmd.empty()) {
-                if (t.joinable()) t.join();           
-                t = thread([&](){
-                    exec(wakeCmd, true, true);
-                });
-            }
+            wakeupServer();
         }
         while (loading) {
             sleep(10);
             if (checkCmd.empty() || exec(checkCmd, true, false).ret == 0) {
                 loading = false;
                 loaded = true;
+                break;
             }
+            wakeupServer();
+        }
+    }
+
+    void wakeupServer() {
+        if (!wakeCmd.empty()) {
+            if (t.joinable()) t.join();           
+            t = thread([&](){
+                exec(wakeCmd, true, true);
+            });
         }
     }
 
