@@ -37,10 +37,10 @@ public:
             throw ERROR("Idle timeout must be positive or zero");
 
         LOG("ZzzProxy config:");
-        LOG("  Backend: " + host + ":" + to_string(hport));
-        LOG("Wake cmd : " + EMPTY_OR(wakeCmd));
-        LOG("Check cmd: " + EMPTY_OR(checkCmd));
-        LOG("Sleep cmd: " + EMPTY_OR(sleepCmd));
+        LOG("Backend ....: " + host + ":" + to_string(hport));
+        LOG("Wake cmd ...: " + EMPTY_OR(wakeCmd));
+        LOG("Check cmd ..: " + EMPTY_OR(checkCmd));
+        LOG("Sleep cmd ..: " + EMPTY_OR(sleepCmd));
         LOG("Idle timeout: " + to_string(this->idleTimeoutSec) + " seconds");
 
         updateActivityTime();
