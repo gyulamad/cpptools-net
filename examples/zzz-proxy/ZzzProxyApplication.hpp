@@ -23,9 +23,8 @@ public:
         args.addHelp(2, "backend", "<host>:<port>");
 
         // New timeout/script parameters unique to zzz-proxy
-        args.addHelp("wakecmd", "/path/to/wake-script.sh OR command");
-        args.addHelp("checkcmd", "/path/to/wake-script.sh OR command");
-        args.addHelp("sleepcmd", "/path/to/stop-script.sh OR command");
+        args.addHelp("startcmd", "/path/to/start-script.sh OR command");
+        args.addHelp("stopcmd", "/path/to/stop-script.sh OR command");
         args.addHelp("timeout", "[default:300] Idle seconds before triggering sleep cmd");
 
         int port = args.get<int>(1);
@@ -34,10 +33,15 @@ public:
         if(addr.size() != 2)
             throw ERROR("Invalid backend format. Use <host>:<port>");
         
-        string wakecmd = args.getopt<string>("wakecmd", "");
-        string checkcmd = args.getopt<string>("checkcmd", "");
-        string sleepcmd = args.getopt<string>("sleepcmd", "");
-        int idleTimeoutSec = args.getopt<int>("timeout", 300);
+        string startcmd = args.getopt<string>("startcmd", "");
+        if (startcmd.empty())
+            throw ERROR("Start command can not be empty");
+        string stopcmd = args.getopt<string>("stopcmd", "");
+        if (stopcmd.empty())
+            throw ERROR("Stop command can not be empty");
+        int timeout = args.getopt<int>("timeout", 300);
+        if (timeout <= 0)
+            throw ERROR("Timeout can not be less than or equal to zero");
 
         int backendPort = parse<int>(addr[1]);
         
@@ -45,7 +49,7 @@ public:
         ZzzProxy* s = new ZzzProxy;
         s->forward(
             port, addr[0], backendPort,
-            wakecmd, checkcmd, sleepcmd, idleTimeoutSec
+            startcmd, stopcmd, timeout
         );
            
         delete s;

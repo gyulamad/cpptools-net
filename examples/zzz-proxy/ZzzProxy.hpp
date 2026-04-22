@@ -9,8 +9,7 @@
 #include "../../../misc/get_time_sec.hpp"
 #include "../../../misc/Executor.hpp"
 #include "../../../misc/sec_to_datetime.hpp"
-
-#include <thread>
+#include <string>
 
 using namespace std;
 
@@ -18,47 +17,36 @@ using namespace std;
 class ZzzProxy: public TcpProxy {
 public:
     ZzzProxy(): TcpProxy() {}
-    virtual ~ZzzProxy() {
-        if (t.joinable()) t.join();
-    }
+    virtual ~ZzzProxy() {}
 
     void forward(
         int port, const string &host, int hport,
-        const string &wakeCmd = "",
-        const string &checkCmd = "",
-        const string &sleepCmd = "",
+        const string &startCmd = "",
+        const string &stopCmd = "",
         int idleTimeoutSec = 300
     ) {
-        this->wakeCmd = wakeCmd;
-        this->checkCmd = checkCmd;
-        this->sleepCmd = sleepCmd;
+        this->startCmd = startCmd;
+        this->stopCmd = stopCmd;
         this->idleTimeoutSec = idleTimeoutSec;
-        if (idleTimeoutSec < 0) 
-            throw ERROR("Idle timeout must be positive or zero");
 
         LOG("ZzzProxy config:");
-        LOG("Backend ....: " + host + ":" + to_string(hport));
-        LOG("Wake cmd ...: " + EMPTY_OR(wakeCmd));
-        LOG("Check cmd ..: " + EMPTY_OR(checkCmd));
-        LOG("Sleep cmd ..: " + EMPTY_OR(sleepCmd));
-        LOG("Idle timeout: " + to_string(this->idleTimeoutSec) + " seconds");
+        LOG("Backend .........: " + host + ":" + to_string(hport));
+        LOG("Start command ...: " + EMPTY_OR(startCmd));
+        LOG("Stop command ....: " + EMPTY_OR(stopCmd));
+        LOG("Idle timeout ....: " + to_string(this->idleTimeoutSec) + " seconds");
 
-        updateActivityTime();
         TcpProxy::forward(port, host, hport);
     }
 
 protected:
-    int idleTimeoutSec;
-    string wakeCmd;
-    string checkCmd;
-    string sleepCmd;
-    time_t lastActivityTime;
-    bool loading = false;
-    bool loaded = false;
-    thread t;
+    int idleTimeoutSec = 0; // 0 - means never timeouts
+    string startCmd;
+    string stopCmd;
+    time_sec lastActivityTime = 0; // 0 - means server turned off
 
     void onClientConnect(int fd, const string& addr) override {
-        startService();
+        if (!isServerOn())
+            turnServerOn();
         TcpProxy::onClientConnect(fd, addr);
         updateActivityTime();
     }
@@ -75,59 +63,52 @@ protected:
 
     void onRawData(int clientFd, string& buf) override {
         TcpProxy::onRawData(clientFd, buf);
-        updateActivityTime();
+        // updateActivityTime();
     }
 
     void onTick() override {
+        if (isServerOn() && isIdleTimeouts())
+            turnServerOff();
         TcpProxy::onTick();
-        stopService();
     }
 
     // ----------------
 
-    void startService() {
-        if (!loading && !loaded) {
-            loading = true;
-            wakeupServer();
-        }
-        while (loading) {
-            sleep(10);
-            if (checkCmd.empty() || exec(checkCmd, true, false).ret == 0) {
-                loading = false;
-                loaded = true;
-                break;
-            }
-            wakeupServer();
-        }
+    void turnServerOn() {
+        // TODO
+        LOG("Start server...");
+        exec_result_t res = exec(startCmd, true, false);
+        cout << res.out << endl;
+        cerr << res.err << endl;
+        if (res.ret) throw ERROR("Execution failed: " + to_string(res.ret));
+        updateActivityTime();
     }
 
-    void wakeupServer() {
-        if (!wakeCmd.empty()) {
-            if (t.joinable()) t.join();           
-            t = thread([&](){
-                exec(wakeCmd, true, true);
-            });
-        }
-    }
-
-    void stopService() {
-        if (!loaded || sleepCmd.empty() || idleTimeoutSec <= 0)
-            return;
-        if (get_time_sec() < lastActivityTime + idleTimeoutSec)
-            return;
-        loading = false;
-        loaded = false;
+    void turnServerOff() {
+        LOG("Stop server...");
+        exec_result_t res = exec(stopCmd, true, false);
+        cout << res.out << endl;
+        cerr << res.err << endl;
+        if (res.ret) throw ERROR("Execution failed: " + to_string(res.ret));
         lastActivityTime = 0;
-        // if (t.joinable()) t.join();           
-        // t = thread([&](){
-            exec(sleepCmd, true, true);
-            sleep(10);
-            // if (t.joinable()) t.join();
-        // });
+    }
+
+    bool isServerOn() {
+        return lastActivityTime;
+    }
+
+    bool isIdleTimeouts() {
+        return 
+            idleTimeoutSec &&
+            isServerOn() && 
+            get_time_sec() - lastActivityTime > idleTimeoutSec;
     }
 
     void updateActivityTime() {
-        lastActivityTime = get_time_sec();
-        LOG("Activity updated to " + sec_to_datetime(lastActivityTime));
+        time_sec now = get_time_sec();
+        if (now == lastActivityTime)
+            return;
+        lastActivityTime = now;
+        LOG("Last activity updated to " + sec_to_datetime(lastActivityTime));
     }
 };
