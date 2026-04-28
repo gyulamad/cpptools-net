@@ -9,6 +9,7 @@
 #include "../../../misc/get_time_sec.hpp"
 #include "../../../misc/Executor.hpp"
 #include "../../../misc/sec_to_datetime.hpp"
+#include "IpWhitelist.hpp"
 #include <string>
 
 using namespace std;
@@ -18,6 +19,12 @@ class ZzzProxy: public TcpProxy {
 public:
     ZzzProxy(): TcpProxy() {}
     virtual ~ZzzProxy() {}
+
+    // Set the IP whitelist for filtering incoming connections.
+    // Pass an empty string to disable filtering (allow all).
+    void setWhitelist(const IpWhitelist& w) {
+        whitelist = w;
+    }
 
     void forward(
         int port, const string &host, int hport,
@@ -43,8 +50,14 @@ protected:
     string startCmd;
     string stopCmd;
     time_sec lastActivityTime = 0; // 0 - means server turned off
+    IpWhitelist whitelist;
 
     void onClientConnect(int fd, const string& addr) override {
+        // Check IP whitelist first — if denied, drop connection immediately
+        if (!whitelist.check(addr)) {
+            ::close(fd);
+            return;
+        }
         if (!isServerOn())
             turnServerOn();
         TcpProxy::onClientConnect(fd, addr);

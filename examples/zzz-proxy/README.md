@@ -22,7 +22,8 @@ When new request arrives:
 
 | File | Description |
 |------|-------------|
-| [`ZzzProxy.hpp`](ZzzProxy.hpp:1) | Core implementation extending `WolProxy` — contains state machine (SERVER_UNKNOWN/SERVER_UP/SERVER_DOWN/SERVER_WAKING/SERVER_SLEEPING), tick() monitoring loop (~100ms intervals), idle detection algorithm |
+| [`ZzzProxy.hpp`](ZzzProxy.hpp:1) | Core implementation extending `TcpProxy` — contains idle timeout logic, activity tracking (`lastActivityTime`), server start/stop via commands |
+| [`IpWhitelist.hpp`](IpWhitelist.hpp:1) | Middle-layer IP filtering abstraction — loads regex patterns from INI config file; blocks denied sources with alert log before proxy processes connection |
 | [`ZzzProxyApplication.hpp`](ZzzProxyApplication.hpp:1) | CLI argument parsing wrapper around base App class; maps positional args into forward() call parameters |
 | [`zzz-proxy.cpp`](zzz-proxy.cpp:1) | Minimal main entry point instantiating application |
 
@@ -61,33 +62,69 @@ repeat cycle from top.
 ## Usage
 
 ```bash
-./zzz-proxy <port> <backend> [wolip] [mac] [wakecmd] [sleepcmd] [timeout]
+./zzz-proxy <port> <backend> --startcmd=<wake_cmd> --stopcmd=<sleep_cmd> [--timeout=N] [--whitelist=config.ini]
 ```
 
 ### Arguments Reference Table
 
-| Position | Name       | Required | Default      | Description                                                                                      |
-|:--------:|:----------:|:--------:|--------------|--------------------------------------------------------------------------------------------------|
-| 1        | port       | Yes      | —            | Local TCP listening port for proxy                                                               |
-| 2        | backend    | Yes      | —            | Target service address as `<host>:<port>` format                                                 |
-| 3        | wolip      | Optional | *(empty)*    | Wake-on-LAN broadcast IP (e.g., `255.255.255.255`)                                               |
-| 4        | mac        | Optional | *(empty)*    | MAC address of target machine's network card                                                     |
-| 5        | wakecmd    | Optional | `./wake.sh`  | Script path OR shell command executed on first incoming request when server state=down          |
-| 6        | sleepcmd   | Optional | `./sleep.sh`| Shell command triggered after idle timeout with NO active client connections                     |
-| 7        | timeout    | Optional | `300`        Idle seconds before triggering the **sleep** action; minimum enforced to be >=60 sec |
+#### Positional Arguments
+
+| Position | Name    | Required | Default | Description                                                      |
+|:--------:|:-------:|:--------:|---------|------------------------------------------------------------------|
+| 1        | port    | Yes      | —       | Local TCP listening port for proxy                               |
+| 2        | backend | Yes      | —       | Target service address as `<host>:<port>` format                 |
+
+#### Named Options (passed via `--key=value`)
+
+| Option     | Required | Default | Description                                                                                      |
+|:-----------|:--------:|---------|--------------------------------------------------------------------------------------------------|
+| startcmd   | Yes      | —       | Script path OR shell command executed when first client connects and server is off               |
+| stopcmd    | Yes      | —       | Shell command triggered after idle timeout with NO active client connections                     |
+| timeout    | No       | `300`   | Idle seconds before triggering the **stop** action; must be > 0                                  |
+| whitelist  | No       | *(none)*| Path to INI config file with `[whitelist]` section containing regex patterns for IP filtering    |
 
 #### Argument Details & Constraints
 
-*Positionals vs Named Options:*  
-The implementation uses positional arguments rather than long-form flags like `--wakecmd`. See [`ZzzProxyApplication.hpp`](ZzzProxyApplication.hpp:30) lines ~21–45 for exact mapping between position numbers and internal variable names:
+*Named Options:*  
+The implementation uses named options (`--key=value`) rather than positional arguments for optional parameters. See [`ZzzProxyApplication.hpp`](ZzzProxyApplication.hpp:26) lines ~21–47 for exact mapping between option names and internal variable names:
 
 ```
-arg[1]=port, arg[2]="host:port", arg[3]=WOL-broadcast-IP,
-arg[4]=MAC-address, arg[5]=path/to/wake-script-or-command-line,
-arg[6]=path/to/stop-script-or-command-line, arg[7]=idle-timeout-seconds
+arg[1]=port, arg[2]="host:port"
+--startcmd=path/to/start-script-or-command-line
+--stopcmd=path/to/stop-script-or-command-line
+--timeout=idle-timeout-seconds (default: 300)
+--whitelist=path/to/ip-whitelist.ini (optional)
 ```
 
-This design mirrors legacy behavior from earlier WOL-only proxies but adds new parameters #5/#6/#7 specifically for zzz functionality.
+### IP Whitelist Filtering
+
+ZzzProxy supports filtering incoming connections by source IP address using a whitelist of regex patterns loaded from an INI configuration file. When enabled, any connection from an IP that does **not** match at least one pattern in the whitelist is immediately rejected with an alert log entry — the proxy performs no further processing (no backend connection, no idle timer update).
+
+**Config File Format:**
+```ini
+[whitelist]
+localnet = ^192\.168\.\d+\.\d+$
+datacenter = ^10\.0\.0\.[0-9]+$
+localhost = ^127\.0\.0\.1$
+```
+
+The section name must be `[whitelist]`. The keys are ignored; only the values (regex patterns) matter. Patterns use ECMAScript regex syntax and match against the IP portion of the client address (port is stripped before matching). If no whitelist file is specified, or if the file has no `[whitelist]` section, all connections are allowed.
+
+**Usage Example:**
+```bash
+./zzz-proxy 8080 localhost:3000 \
+    --startcmd=./srv/start.sh \
+    --stopcmd=./srv/stop.sh \
+    --timeout=600 \
+    --whitelist=/etc/zzzproxy/allowed.ini
+```
+
+When a denied IP connects, the log shows:
+```
+[alert] Blocked connection from denied source: 10.99.88.77:54321
+```
+
+The whitelist feature is implemented as a separate [`IpWhitelist`](IpWhitelist.hpp:1) class that can be reused independently of ZzzProxy. See the embedded unit tests in that file for pattern matching behavior details.
 
 ### Examples
 

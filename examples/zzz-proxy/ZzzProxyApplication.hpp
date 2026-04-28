@@ -26,6 +26,7 @@ public:
         args.addHelp("startcmd", "/path/to/start-script.sh OR command");
         args.addHelp("stopcmd", "/path/to/stop-script.sh OR command");
         args.addHelp("timeout", "[default:300] Idle seconds before triggering sleep cmd");
+        args.addHelp("whitelist", "Path to INI config file with [whitelist] section containing regex patterns");
 
         int port = args.get<int>(1);
         
@@ -43,10 +44,18 @@ public:
         if (timeout <= 0)
             throw ERROR("Timeout can not be less than or equal to zero");
 
+        string whitelistFile = args.getopt<string>("whitelist", "");
+
         int backendPort = parse<int>(addr[1]);
         
         // Construct and run proxy instance:
         ZzzProxy* s = new ZzzProxy;
+        
+        // Load IP whitelist if specified
+        IpWhitelist wl;
+        wl.load(whitelistFile);
+        s->setWhitelist(wl);
+        
         s->forward(
             port, addr[0], backendPort,
             startcmd, stopcmd, timeout
