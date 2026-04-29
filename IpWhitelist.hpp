@@ -86,7 +86,7 @@ public:
         if (isAllowed(addr))
             return true;
 
-        LOG("[ALERT] Blocked connection from denied source: " + addr);
+        LOG_ALERT("Blocked connection from denied source: " + addr);
         return false;
     }
 
