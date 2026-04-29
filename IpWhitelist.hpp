@@ -18,9 +18,9 @@
 //   connections are allowed (no filtering).
 // =============================================================================
 
-#include "../../../misc/IniFile.hpp"
-#include "../../../misc/regx_match.hpp"
-#include "../../../misc/Logger.hpp"
+#include "../misc/IniFile.hpp"
+#include "../misc/regx_match.hpp"
+#include "../misc/Logger.hpp"
 #include <vector>
 #include <string>
 
@@ -117,8 +117,8 @@ protected:
 
 
 #ifdef TEST
-#include "../../../misc/TEST.hpp"
-#include "../../../misc/NullLogger.hpp"
+#include "../misc/TEST.hpp"
+#include "../misc/NullLogger.hpp"
 
 TEST(test_IpWhitelist_extractIp_simple) {
     IpWhitelist w;

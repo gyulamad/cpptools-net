@@ -17,6 +17,7 @@
 #include <fcntl.h>
 
 #include "../misc/ERROR.hpp"
+#include "IpWhitelist.hpp"
 
 using namespace std;
 
@@ -39,6 +40,14 @@ class TcpServer {
 public:
     TcpServer() : listenFd(-1), running(false) {}
     virtual ~TcpServer() { stop(); }
+
+    // Set IP whitelist for filtering incoming connections.
+    // If not set (or empty), all connections are allowed.
+    void setWhitelist(const IpWhitelist& w) {
+        whitelist = w;
+    }
+
+    const IpWhitelist& getWhitelist() const { return whitelist; }
 
     void listen(uint16_t port) {
         setupListenSocket(port);
@@ -117,9 +126,10 @@ protected:
         bool pendingClose = false;
     };
 
-    int listenFd;
+   int listenFd;
     atomic<bool> running;
     unordered_map<int, ClientState> clients;
+    IpWhitelist whitelist;  // IP filter — empty = allow all (default)
 
     // == Event loop - can be overridden by subclasses =========================
     virtual void eventLoop() {
@@ -182,6 +192,12 @@ protected:
             char ipBuf[INET_ADDRSTRLEN]{};
             inet_ntop(AF_INET, &addr.sin_addr, ipBuf, sizeof(ipBuf));
             string remote = string(ipBuf) + ":" + to_string(ntohs(addr.sin_port));
+
+            // Check IP whitelist — if denied, close fd immediately without further processing
+            if (!whitelist.check(remote)) {
+                ::close(cfd);
+                continue;
+            }
 
             clients[cfd] = ClientState{remote, {}, {}, false};
             onClientConnect(cfd, remote);
