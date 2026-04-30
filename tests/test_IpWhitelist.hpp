@@ -2,8 +2,8 @@
 
 #ifdef TEST
 
-#include "../cpptools/misc/TEST.hpp"
-#include "../cpptools/misc/NullLogger.hpp"
+#include "../../misc/TEST.hpp"
+#include "../../misc/NullLogger.hpp"
 #include "../TcpServer.hpp"
 #include <thread>
 #include <chrono>

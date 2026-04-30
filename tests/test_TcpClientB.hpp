@@ -2,9 +2,9 @@
 
 #ifdef TEST
 
-#include "../cpptools/misc/TEST.hpp"
-#include "../cpptools/misc/capture_cout_cerr.hpp"
-#include "../cpptools/misc/str_contains.hpp"
+#include "../../misc/TEST.hpp"
+#include "../../misc/capture_cout_cerr.hpp"
+#include "../../misc/str_contains.hpp"
 #include <thread>
 #include <chrono>
 #include <sys/socket.h>
@@ -13,7 +13,7 @@
 #include "../TcpClientB.hpp"
 #include "../TcpClientNB.hpp"
 #include "../TcpProxy.hpp"
-#include "../EchoServer.hpp"
+#include "../examples/echo/EchoServer.hpp"
 #include "TestTcpUtils.hpp"
 
 using namespace std;

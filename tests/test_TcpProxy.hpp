@@ -2,14 +2,14 @@
 
 #ifdef TEST
 
-#include "../cpptools/misc/TEST.hpp"
-#include "../cpptools/misc/capture_cout.hpp"
-#include "../cpptools/misc/capture_cout_cerr.hpp"
-#include "../cpptools/misc/Stopper.hpp"
+#include "../../misc/TEST.hpp"
+#include "../../misc/capture_cout.hpp"
+#include "../../misc/capture_cout_cerr.hpp"
+#include "../../misc/Stopper.hpp"
 #include <thread>
 #include <chrono>
 #include "../TcpProxy.hpp"
-#include "../EchoServer.hpp"
+#include "../examples/echo/EchoServer.hpp"
 #include "../TcpClientB.hpp"
 #include "TestTcpUtils.hpp"
 

@@ -2,10 +2,10 @@
 
 #ifdef TEST
 
-#include "../cpptools/misc/TEST.hpp"
-#include "../cpptools/misc/capture_cout.hpp"
+#include "../../misc/TEST.hpp"
+#include "../../misc/capture_cout.hpp"
 #include <thread>
-#include "../EchoServer.hpp"
+#include "../examples/echo/EchoServer.hpp"
 #include "../TcpClientB.hpp"
 
 using namespace std;

@@ -2,7 +2,7 @@
 
 #ifdef TEST
 
-#include "../cpptools/misc/TEST.hpp"
+#include "../../misc/TEST.hpp"
 #include "../TcpClientNB.hpp"
 
 using namespace std;

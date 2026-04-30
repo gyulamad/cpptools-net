@@ -5,7 +5,7 @@
 #include <thread>
 #include <chrono>
 #include "../TcpProxy.hpp"
-#include "../EchoServer.hpp"
+#include "../examples/echo/EchoServer.hpp"
 #include "../TcpClientB.hpp"
 
 class TestTcpUtils {

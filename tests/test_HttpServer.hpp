@@ -2,8 +2,8 @@
 
 #ifdef TEST
 
-#include "../cpptools/misc/TEST.hpp"
-#include "../cpptools/misc/str_contains.hpp"
+#include "../../misc/TEST.hpp"
+#include "../../misc/str_contains.hpp"
 #include "../HttpServer.hpp"
 
 using namespace std;
