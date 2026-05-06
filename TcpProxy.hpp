@@ -27,6 +27,10 @@ using namespace std;
 //   Each client gets its own connection to the backend.
 //   Handles bidirectional forwarding with graceful disconnect handling.
 //
+//   Subclass hooks for backend lifecycle:
+//     onBackendConnectionFailed(clientFd) — called when backend connect fails
+//     onBackendDisconnected(clientFd)      — called when backend closes/dies
+//
 //   Usage:
 //     TcpProxy proxy;
 //     proxy.forward(8080, "backend.example.com", 9090);
@@ -43,6 +47,8 @@ public:
     }
 
 protected:
+    // == Lifecycle hooks =======================================================
+
     void onServerStart(uint16_t port) override {
         cout << "[TcpProxy] Listening on port " << port 
              << " -> forwarding to " << backendHost << ":" << backendPort << endl;
@@ -53,9 +59,10 @@ protected:
         cout << "[TcpProxy] Stopped." << endl;
     }
 
+    // LCOV_EXCL_START
     void onClientConnect(int fd, const string& addr) override {
         cout << "[+] Client " << fd << " from " << addr << endl;
-        
+
         auto backend = make_unique<TcpClientNB>();
         backend->connect(backendHost, backendPort);
         backends[fd] = BackendState{::move(backend), addr, {}};
@@ -63,7 +70,7 @@ protected:
 
     void onClientDisconnect(int fd) override {
         cout << "[-] Client " << fd << " disconnected." << endl;
-        
+
         auto it = backends.find(fd);
         if (it != backends.end()) {
             it->second.backend->disconnect();
@@ -71,17 +78,15 @@ protected:
         }
     }
 
-    // LCOV_EXCL_START
     void onClientError(int fd, const string& err) override {
         cerr << "[!] Client " << fd << " error: " << err << endl;
-        
+
         auto it = backends.find(fd);
         if (it != backends.end()) {
             it->second.backend->disconnect();
             backends.erase(it);
         }
     }
-    // LCOV_EXCL_STOP
 
     void onRawData(int clientFd, string& buf) override {
         auto it = backends.find(clientFd);
@@ -101,6 +106,16 @@ protected:
             buf.clear();
         }
     }
+
+    // == Backend lifecycle hooks — override in subclass for state tracking ======
+
+    // Called when a backend connection fails (e.g., server not running)
+    virtual void onBackendConnectionFailed(int /*clientFd*/) {}
+
+    // Called when an existing backend closes/disconnects unexpectedly
+    virtual void onBackendDisconnected(int /*clientFd*/) {}
+
+    // LCOV_EXCL_STOP
 
     // Override eventLoop to include backend fds in select
     void eventLoop() override {
@@ -179,9 +194,10 @@ protected:
             auto& backend = it->second.backend;
             int bfd = backend->getFd();
             if (bfd < 0) {
-                // Backend connection failed
+                // Backend connection failed — notify subclass then disconnect client
                 if (!backend->isConnecting()) {
                     cerr << "[!] Backend connection failed for client " << clientFd << endl;
+                    onBackendConnectionFailed(clientFd);
                     disconnectClient(clientFd);
                 }
                 continue;
@@ -202,20 +218,21 @@ protected:
             if (FD_ISSET(bfd, &readSet)) {
                 ssize_t n = backend->handleRead();
                 if (n == 0) {
-                    // Backend closed connection - forward any remaining data first
+                    // Backend closed connection — forward remaining data, notify subclass
                     const string& remaining = backend->peekReceived();
                     if (!remaining.empty()) {
                         sendToClient(clientFd, remaining);
                         backend->consumeReceived(remaining.size());
                     }
-                    // Graceful close: let client sendQueue drain before disconnecting
                     cout << "[-] Backend closed for client " << clientFd << endl;
+                    onBackendDisconnected(clientFd);
+
                     auto cit = clients.find(clientFd);
                     if (cit != clients.end() && !cit->second.sendQueue.empty()) {
-                        // Data pending - close after flush
+                        // Data pending — close after flush
                         closeAfterFlush(clientFd);
                     } else {
-                        // No pending data - close immediately
+                        // No pending data — close immediately
                         disconnectClient(clientFd);
                     }
                     continue;
@@ -254,3 +271,4 @@ protected:
         if (listenFd >= 0) { ::close(listenFd); listenFd = -1; }
     }
 };
+

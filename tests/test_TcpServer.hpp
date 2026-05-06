@@ -13,9 +13,9 @@ using namespace std;
 TEST(test_TcpServer_echo_single_client) {
     capture_cout([]() {
         EchoServer s;
-        thread st([&s]() { s.listen(9090); });
+        thread st([&s]() { try { s.listen(9093); } catch (...) {} });
         TcpClientB c;
-        c.connect("localhost", 9090);
+        c.connect("localhost", 9093);
         c.send("Hello!");
         while (!c.available()); // waiting for response...
         const string echo = c.read();
@@ -28,7 +28,7 @@ TEST(test_TcpServer_echo_single_client) {
 TEST(test_TcpServer_echo_multi_client) {
     capture_cout([]() {
         EchoServer s;
-        thread st([&s]() { s.listen(9090); });
+        thread st([&s]() { try { s.listen(9092); } catch (...) {} });
 
         TcpClientB c1, c2, c3;
         string echo1, echo2, echo3;
@@ -38,7 +38,7 @@ TEST(test_TcpServer_echo_multi_client) {
         thread c1t([&]() {
         // LCOV_EXCL_STOP
             Stopper stopper;
-            c1.connect("localhost", 9090);
+            c1.connect("localhost", 9092);
             c1.send("Hello1");
             while (!c1.available()); // waiting for response...
             echo1 = c1.read();
@@ -48,7 +48,7 @@ TEST(test_TcpServer_echo_multi_client) {
         thread c2t([&]() {
         // LCOV_EXCL_STOP
             Stopper stopper;
-            c2.connect("localhost", 9090);
+            c2.connect("localhost", 9092);
             c2.send("Hello2");
             while (!c2.available()); // waiting for response...
             echo2 = c2.read();
@@ -58,7 +58,7 @@ TEST(test_TcpServer_echo_multi_client) {
         thread c3t([&]() {
         // LCOV_EXCL_STOP
             Stopper stopper;
-            c3.connect("localhost", 9090);
+            c3.connect("localhost", 9092);
             c3.send("Hello3");
             while (!c3.available()); // waiting for response...
             echo3 = c3.read();
@@ -197,3 +197,4 @@ TEST(test_TcpServer_closeAfterFlush_pending_data) {
 }
 
 #endif
+

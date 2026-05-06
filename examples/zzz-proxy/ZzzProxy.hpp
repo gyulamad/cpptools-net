@@ -1,7 +1,7 @@
 #pragma once
 
 // =============================================================================
-// ZzzProxy.hpp — Sleep/Wake Proxy with Idle Timeout Shutdown Support
+// ZzzProxy.hpp - Sleep/Wake Proxy with Idle Timeout Shutdown Support
 // =============================================================================
 
 #include "../../TcpProxy.hpp"
@@ -9,6 +9,7 @@
 #include "../../../misc/get_time_sec.hpp"
 #include "../../../misc/Executor.hpp"
 #include "../../../misc/sec_to_datetime.hpp"
+#include <atomic>
 #include <string>
 
 using namespace std;
@@ -42,7 +43,11 @@ protected:
      int idleTimeoutSec = 0; // 0 - means never timeouts
     string startCmd;
     string stopCmd;
-    time_sec lastActivityTime = 0; // 0 - means server turned off
+    time_sec lastActivityTime = 0;   // 0 -> server off (turned off by proxy via idle timeout)
+
+    // FIX for stale state bug: tracks whether a backend failure was detected.
+    // Even if lastActivityTime > 0, isServerOn() returns false when this flag is set.
+    atomic<bool> backendFailureDetected{false};
 
     void onClientConnect(int fd, const string& addr) override {
         if (!isServerOn())
@@ -61,9 +66,22 @@ protected:
         updateActivityTime();
     }
 
+    // FIX: Mark backend failure so isServerOn() returns false (clears stale state).
+    // Called BEFORE disconnectClient(), which would otherwise re-set lastActivityTime.
+    void onBackendConnectionFailed(int /*clientFd*/) override {
+        LOG("[!] Backend connection failed - marking server as OFF");
+        backendFailureDetected.store(true);
+    }
+
+    // FIX: Mark unexpected backend disconnection (crash, network drop).
+    void onBackendDisconnected(int /*clientFd*/) override {
+        LOG("[-] Backend disconnected unexpectedly - marking server as OFF");
+        backendFailureDetected.store(true);
+    }
+
     void onRawData(int clientFd, string& buf) override {
         TcpProxy::onRawData(clientFd, buf);
-        // updateActivityTime();
+        updateActivityTime();
     }
 
     void onTick() override {
@@ -75,12 +93,17 @@ protected:
     // ----------------
 
     void turnServerOn() {
-        // TODO
         LOG("Start server...");
-        exec_result_t res = exec(startCmd, true, false);
-        cout << res.out << endl;
-        cerr << res.err << endl;
-        if (res.ret) throw ERROR("Execution failed: " + to_string(res.ret));
+        if (!startCmd.empty()) {
+            exec_result_t res = exec(startCmd, true, false);
+            cout << res.out << endl;
+            cerr << res.err << endl;
+            if (res.ret) throw ERROR("Execution failed: " + to_string(res.ret));
+        } else {
+            LOG("[info] No start command configured - assuming server is managed externally");
+        }
+        // Clear failure flag - we just started the server successfully
+        backendFailureDetected.store(false);
         updateActivityTime();
     }
 
@@ -90,11 +113,13 @@ protected:
         cout << res.out << endl;
         cerr << res.err << endl;
         if (res.ret) throw ERROR("Execution failed: " + to_string(res.ret));
+        // Intentional shutdown - clear failure flag and reset activity time
+        backendFailureDetected.store(false);
         lastActivityTime = 0;
     }
 
     bool isServerOn() {
-        return lastActivityTime;
+        return !backendFailureDetected.load() && lastActivityTime != 0;
     }
 
     bool isIdleTimeouts() {
@@ -108,7 +133,13 @@ protected:
         time_sec now = get_time_sec();
         if (now == lastActivityTime)
             return;
-        lastActivityTime = now;
-        LOG("Last activity updated to " + sec_to_datetime(lastActivityTime));
+        // Only update activity time when no backend failure is pending.
+        // If a failure was detected, the server should be considered OFF until
+        // turnServerOn() succeeds and clears the flag.
+        if (!backendFailureDetected.load()) {
+            lastActivityTime = now;
+            LOG("Last activity updated to " + sec_to_datetime(lastActivityTime));
+        }
     }
 };
+
