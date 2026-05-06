@@ -6,6 +6,7 @@
 #include "test_HttpServer.hpp"
 #include "test_TcpClientNB.hpp"
 #include "test_TcpProxy.hpp"
+#include "test_ZzzProxy.hpp"
 #include "test_IpWhitelist.hpp"
 #endif // TEST
 
