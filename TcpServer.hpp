@@ -6,6 +6,7 @@
 #include <deque>
 #include <cstring>
 #include <cerrno>
+#include <iostream>
 #include <atomic>
 
 #include <sys/types.h>
@@ -73,6 +74,10 @@ protected:
     virtual void onClientDisconnect(int /*fd*/) {}
     virtual void onClientError(int /*fd*/, const string& /*error*/) {}
 
+    // Called when a connection is rejected by IP whitelist (blocked) before accept.
+    // remoteAddr : "ip:port" string of the blocked client
+    virtual void onClientBlocked(const string& /*remoteAddr*/) {}
+
     // Called every ~100 ms regardless of socket activity.
     // Useful for timers, drip-sending, keepalives, etc.
     virtual void onTick() {}
@@ -98,12 +103,16 @@ protected:
             );
     }
 
+    // Log the current number of active client connections.
+    void logActiveClients() { cout << "[TcpServer] Active clients: " << clients.size() << endl; }
+
     void disconnectClient(int fd) {
         auto it = clients.find(fd);
         if (it == clients.end()) return;
         onClientDisconnect(fd);
         ::close(fd);
         clients.erase(it);
+        logActiveClients();
     }
 
     // Finish draining the send queue, then disconnect.
@@ -196,11 +205,14 @@ protected:
             // Check IP whitelist — if denied, close fd immediately without further processing
             if (!whitelist.check(remote)) {
                 ::close(cfd);
+                onClientBlocked(remote);
+                logActiveClients();
                 continue;
             }
 
             clients[cfd] = ClientState{remote, {}, {}, false};
             onClientConnect(cfd, remote);
+            logActiveClients();
         }
     }
 
