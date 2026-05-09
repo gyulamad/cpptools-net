@@ -40,7 +40,7 @@ public:
     }
 
 protected:
-     int idleTimeoutSec = 0; // 0 - means never timeouts
+    int idleTimeoutSec = 0; // 0 - means never timeouts
     string startCmd;
     string stopCmd;
     time_sec lastActivityTime = 0;   // 0 -> server off (turned off by proxy via idle timeout)
@@ -73,10 +73,12 @@ protected:
         backendFailureDetected.store(true);
     }
 
-    // FIX: Mark unexpected backend disconnection (crash, network drop).
-    void onBackendDisconnected(int /*clientFd*/) override {
-        LOG("[-] Backend disconnected unexpectedly - marking server as OFF");
-        backendFailureDetected.store(true);
+    // FIX: Do NOT set failure flag here — backend socket closure ≠ server crash.
+    // A closed TCP connection could be normal (FIN exchange), llama.cpp idle-close,
+    // or a network blip. If the server actually died, the next connect attempt will
+    // fail and onBackendConnectionFailed() will correctly mark it OFF + restart.
+    void onBackendDisconnected(int clientFd) override {
+        LOG(string("[-] Backend connection closed for client ") + to_string(clientFd));
     }
 
     void onRawData(int clientFd, string& buf) override {
@@ -87,6 +89,10 @@ protected:
     void onTick() override {
         if (isServerOn() && isIdleTimeouts())
             turnServerOff();
+
+        // TODO (STUB for ref:todo/multi-restart-bug-healthcheck.md) — Periodic health-check probe when no active clients.
+        // Stage-2 design covers ping + llama.cpp /v1/health polling to detect stale OFF state during idle periods.
+
         TcpProxy::onTick();
     }
 
@@ -123,18 +129,17 @@ protected:
     }
 
     bool isIdleTimeouts() {
-        return 
+        return
             idleTimeoutSec &&
-            isServerOn() && 
+            isServerOn() &&
             get_time_sec() - lastActivityTime > idleTimeoutSec;
     }
 
     void updateActivityTime() {
         time_sec now = get_time_sec();
-        if (now == lastActivityTime)
-            return;
-        // Only update activity time when no backend failure is pending.
-        // If a failure was detected, the server should be considered OFF until
+        if (now == lastActivityTime) return;
+        // Only update when no backend failure is pending.
+        // If a connection failed, the server should be considered OFF until
         // turnServerOn() succeeds and clears the flag.
         if (!backendFailureDetected.load()) {
             lastActivityTime = now;
