@@ -85,54 +85,56 @@ TEST(test_TcpServer_echo_multi_client) {
 // Coverage: Line 101-102 in TcpServer.hpp - "if (it->second.sendQueue.empty())"
 // -----------------------------------------------------------------------------
 TEST(test_TcpServer_closeAfterFlush_empty_queue) {
-    // Create a custom test server that exposes closeAfterFlush behavior
-    class TestServer : public TcpServer {
-    public:
-        void testCloseAfterFlush(int fd) {
-            closeAfterFlush(fd);
-        }
-        
-        bool hasClient(int fd) {
-            return clients.find(fd) != clients.end();
-        }
-        
-        void addTestClient(int fd) {
-            clients[fd] = ClientState{"127.0.0.1:1234", {}, {}, false};
-        }
-        
-        void removeTestClient(int fd) {
-            auto it = clients.find(fd);
-            if (it != clients.end()) {
-                ::close(fd);
-                clients.erase(it);
+    capture_cout([]() {
+        // Create a custom test server that exposes closeAfterFlush behavior
+        class TestServer : public TcpServer {
+        public:
+            void testCloseAfterFlush(int fd) {
+                closeAfterFlush(fd);
             }
-        }
-        
-    // LCOV_EXCL_START
-    private:
-        void onRawData(int /*fd*/, string& /*buf*/) override {}
-    };
-    // LCOV_EXCL_STOP
-    
-    TestServer server;
-    
-    // Create a socket pair to test with
-    int sv[2];
-    int rc = socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
-    assert(rc == 0 && "socketpair should succeed");
-    
-    // Add a client with empty sendQueue
-    server.addTestClient(sv[0]);
-    
-    // closeAfterFlush should disconnect immediately (queue is empty)
-    server.testCloseAfterFlush(sv[0]);
-    
-    // Client should be removed
-    bool removed = !server.hasClient(sv[0]);
-    
-    close(sv[1]);
-    
-    assert(removed && "Client should be disconnected when sendQueue is empty");
+
+            bool hasClient(int fd) {
+                return clients.find(fd) != clients.end();
+            }
+
+            void addTestClient(int fd) {
+                clients[fd] = ClientState{"127.0.0.1:1234", {}, {}, false};
+            }
+
+            void removeTestClient(int fd) {
+                auto it = clients.find(fd);
+                if (it != clients.end()) {
+                    ::close(fd);
+                    clients.erase(it);
+                }
+            }
+
+        // LCOV_EXCL_START
+        private:
+            void onRawData(int /*fd*/, string& /*buf*/) override {}
+        };
+        // LCOV_EXCL_STOP
+
+        TestServer server;
+
+        // Create a socket pair to test with
+        int sv[2];
+        int rc = socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
+        assert(rc == 0 && "socketpair should succeed");
+
+        // Add a client with empty sendQueue
+        server.addTestClient(sv[0]);
+
+        // closeAfterFlush should disconnect immediately (queue is empty)
+        server.testCloseAfterFlush(sv[0]);
+
+        // Client should be removed
+        bool removed = !server.hasClient(sv[0]);
+
+        close(sv[1]);
+
+        assert(removed && "Client should be disconnected when sendQueue is empty");
+    });
 }
 
 // -----------------------------------------------------------------------------

@@ -4,6 +4,7 @@
 
 #include "../../misc/TEST.hpp"
 #include "../../misc/NullLogger.hpp"
+#include "../../misc/capture_cout.hpp"
 #include "../TcpServer.hpp"
 #include <thread>
 #include <chrono>
@@ -16,72 +17,74 @@ using namespace std;
 // Proves that TcpServer::acceptClients() drops the fd BEFORE calling
 // onClientConnect(), so ZzzProxy::turnServerOn() is never triggered.
 TEST(test_IpWhitelist_denied_ip_never_reaches_on_client_connect) {
-    Logger* origLogger = logger();
-    static NullLogger nullLog;
-    logger(&nullLog);
+    capture_cout([]() {
+        Logger* origLogger = logger();
+        static NullLogger nullLog;
+        logger(&nullLog);
 
-    // Subclass TcpServer that tracks whether onClientConnect was called
-    class TrackingTcpServer : public TcpServer {
-    public:
-        bool connectCalled = false;
-        
-        void onRawData(int /*fd*/, string& /*buf*/) override {}  // no-op
-        
-        void onClientConnect(int /*fd*/, const string& /*addr*/) override {
-            connectCalled = true;  // This should NEVER be set for denied IPs
-        }
-    };
+        // Subclass TcpServer that tracks whether onClientConnect was called
+        class TrackingTcpServer : public TcpServer {
+        public:
+            bool connectCalled = false;
 
-    TrackingTcpServer server;
-    
-    // Deny ALL traffic including localhost (127.0.0.1)
-    IpWhitelist wl;
-    wl.setPatterns({"^999\\.999\\.999\\.999$"});  // No real IP matches this
-    server.setWhitelist(wl);
+            void onRawData(int /*fd*/, string& /*buf*/) override {}  // no-op
 
-    // Start the server on a high port in a separate thread
-    std::thread srvThread([&]() {
+            void onClientConnect(int /*fd*/, const string& /*addr*/) override {
+                connectCalled = true;  // This should NEVER be set for denied IPs
+            }
+        };
+
+        TrackingTcpServer server;
+
+        // Deny ALL traffic including localhost (127.0.0.1)
+        IpWhitelist wl;
+        wl.setPatterns({"^999\\.999\\.999\\.999$"});  // No real IP matches this
+        server.setWhitelist(wl);
+
+        // Start the server on a high port in a separate thread
+        std::thread srvThread([&]() {
+            try {
+                server.listen(17923);
+            } catch (...) {
+                // Server stopped or error — expected when we call stop()
+            }
+        });
+
+        // Wait for the listen socket to be ready
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+
+        // Connect a client from localhost (which is DENIED by our whitelist)
         try {
-            server.listen(17923);
+            int cfd = ::socket(AF_INET, SOCK_STREAM, 0);
+            sockaddr_in addr{};
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons(17923);
+            inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+
+            if (::connect(cfd, (sockaddr*)&addr, sizeof(addr)) >= 0) {
+                // Connection accepted at kernel level — now the server should close it
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                ::close(cfd);
+            } else {
+                // connect() failed (RST received) — also valid proof of rejection
+                ::close(cfd);
+            }
         } catch (...) {
-            // Server stopped or error — expected when we call stop()
+            // Connection rejected — expected behavior for denied IP
         }
+
+        // Give the server time to process the accept/close cycle
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+        // Stop the server cleanly
+        server.stop();
+        if (srvThread.joinable()) srvThread.join();
+
+        logger(origLogger);
+
+        assert(!server.connectCalled &&
+            "onClientConnect must NOT be called for denied IPs — backend would never wake up");
     });
-
-    // Wait for the listen socket to be ready
-    std::this_thread::sleep_for(std::chrono::milliseconds(150));
-
-    // Connect a client from localhost (which is DENIED by our whitelist)
-    try {
-        int cfd = ::socket(AF_INET, SOCK_STREAM, 0);
-        sockaddr_in addr{};
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(17923);
-        inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
-        
-        if (::connect(cfd, (sockaddr*)&addr, sizeof(addr)) >= 0) {
-            // Connection accepted at kernel level — now the server should close it
-            std::this_thread::sleep_for(std::chrono::milliseconds(200));
-            ::close(cfd);
-        } else {
-            // connect() failed (RST received) — also valid proof of rejection
-            ::close(cfd);
-        }
-    } catch (...) {
-        // Connection rejected — expected behavior for denied IP
-    }
-
-    // Give the server time to process the accept/close cycle
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
-    // Stop the server cleanly
-    server.stop();
-    if (srvThread.joinable()) srvThread.join();
-
-    logger(origLogger);
-
-    assert(!server.connectCalled && 
-        "onClientConnect must NOT be called for denied IPs — backend would never wake up");
 }
 
 TEST(test_IpWhitelist_extractIp_simple) {
@@ -139,11 +142,11 @@ TEST(test_IpWhitelist_check_denies_ip) {
     Logger* origLogger = logger();
     static NullLogger nullLog;
     logger(&nullLog);
-    
+
     IpWhitelist w;
     w.setPatterns({"^127\\.0\\.0\\.1$"});
     assert(!w.check("192.168.1.1:1234") && "check() should return false for denied IP");
-    
+
     logger(origLogger);
 }
 
@@ -161,3 +164,4 @@ TEST(test_IpWhitelist_empty_patterns_disables_filtering) {
 }
 
 #endif // TEST
+
