@@ -2,12 +2,38 @@
 
 set -euo pipefail
 
-MAC_ADDRESS="50:65:F3:2D:45:3F"
+MAC_ADDRESS="<SERVER-MAC-ADDRESS>"
 BROADCAST_ADDR="192.168.1.255"
 
-TARGET_IP="192.168.1.197"       # IP address of machine being started  
-SSH_USER="gyula"
-SERVER_SCRIPT="./llamacpp-server.sh MiniMax-M2.5 80000 >> ./llamacpp-server.log 2>&1 &"
+TARGET_IP="<SERVER-IP-ADDRESS>"       # IP address of machine being started  
+SSH_USER="<SERVER-USERNAME>"
+
+#MODEL="MiniMax-M2.5"
+#MODEL="MiniMax-M2.7"
+#MODEL="Gemma-4"
+#MODEL="GLM-4.7-Flash"
+#MODEL="GLM-5"
+#MODEL="GLM-5.1"
+#MODEL="Qwen3.6-27B"
+#MODEL="Qwen3.6-27B-abliterated-Q2_K"
+MODEL="Qwen3.6-27B-abliterated-Q6_K"
+#MODEL="Qwen3.6-35B-A3B"
+#MODEL="Qwen3"
+#MODEL="Holo3-35B-A3B"
+
+#CONTEXT=180000
+#CONTEXT=200000
+#CONTEXT=600000
+#CONTEXT=250000
+#CONTEXT=1000000
+#CONTEXT=1800000
+CONTEXT=2000000
+
+SERVER_SCRIPT="./llamacpp-server.sh $MODEL $CONTEXT >> ./llamacpp-server.log 2>&1 &"
+#SERVER_SCRIPT="./llamacpp-server.sh MiniMax-M2.5 80000 >> ./llamacpp-server.log 2>&1 &"
+#SERVER_SCRIPT="./llamacpp-server.sh GLM-5 80000 >> ./llamacpp-server.log 2>&1 &"
+#SERVER_SCRIPT="./llamacpp-server.sh Gemma-4 80000 >> ./llamacpp-server.log 2>&1 &"
+#SERVER_SCRIPT="./llamacpp-server.sh GLM-4.7-Flash 80000 >> ./llamacpp-server.log 2>&1 &"
 
 HEALTH_HOST="monster"           # Hostname after DNS resolution /etc/hosts entry  
 HEALTH_PORT=8080                # Port where llama.cpp server listens    
@@ -17,7 +43,7 @@ MAX_PING_RETRIES=180             # Max pings while waiting for boot (~60s)
 PING_INTERVAL=1                 
 
 MAX_HEALTH_RETRIES=180          # Max attempts checking llm server readiness (~600s max)
-HEALTH_RETRY_DELAY=5            # Seconds between each retry  
+HEALTH_RETRY_DELAY=30            # Seconds between each retry  
 
 echo "[START] Sending WoL magic packet..."
 wakeonlan -i "$BROADCAST_ADDR" "$MAC_ADDRESS"
